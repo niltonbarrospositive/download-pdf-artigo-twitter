@@ -1,6 +1,3 @@
-# PDFs gerados
-*.pdf
-
 # Python
 __pycache__/
 *.pyc
