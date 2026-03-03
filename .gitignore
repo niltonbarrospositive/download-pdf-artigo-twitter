@@ -1,0 +1,20 @@
+# PDFs gerados
+*.pdf
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Ambiente
+.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
