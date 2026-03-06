@@ -101,11 +101,58 @@ JS_EXTRAIR_ARTIGO = """
     const blocos = [];
 
     if (conteudo) {
+        // Função para processar formatação inline (negrito, itálico, links)
+        const processar = (node) => {
+            if (node.nodeType === 3) return node.textContent;
+            if (node.nodeType !== 1) return '';
+
+            const tag = node.tagName.toLowerCase();
+            const style = node.getAttribute('style') || '';
+            let conteudo = '';
+            for (const filho of node.childNodes) {
+                conteudo += processar(filho);
+            }
+
+            if (tag === 'a') {
+                const href = node.getAttribute('href') || '';
+                return '<a href="' + href + '">' + conteudo + '</a>';
+            }
+            if (style.includes('font-weight: bold') || style.includes('font-weight:bold')) {
+                return '<strong>' + conteudo + '</strong>';
+            }
+            if (style.includes('font-style: italic') || style.includes('font-style:italic')) {
+                return '<em>' + conteudo + '</em>';
+            }
+            return conteudo;
+        };
+
         const blockEls = conteudo.querySelectorAll('[data-block="true"]');
         blockEls.forEach(block => {
             const cls = block.className || '';
+            const tagName = block.tagName.toLowerCase();
             const tipoMatch = cls.match(/longform-([\\w-]+)/);
             let tipo = tipoMatch ? tipoMatch[1] : 'unstyled';
+
+            // Detectar blocos de código em <section> com <pre><code> dentro
+            const codeEl = block.querySelector('pre > code');
+            if (codeEl) {
+                const lang = (codeEl.className || '').replace('language-', '');
+                // Limpar whitespace extra do Twitter (trailing + leading comum)
+                let lines = (codeEl.textContent || '')
+                    .split('\\n')
+                    .map(line => line.trimEnd());
+                // Remover indentação comum (Twitter adiciona padding)
+                const nonEmpty = lines.filter(l => l.length > 0);
+                if (nonEmpty.length > 0) {
+                    const minIndent = Math.min(...nonEmpty.map(l => l.match(/^(\\s*)/)[1].length));
+                    if (minIndent > 0) {
+                        lines = lines.map(l => l.length > 0 ? l.substring(minIndent) : l);
+                    }
+                }
+                const codeText = lines.join('\\n').trim();
+                blocos.push({ tipo: 'code-block', html: codeText, imgSrc: null, lang: lang });
+                return;
+            }
 
             // Detectar blocos de imagem (atomic) - têm img ou tweetPhoto dentro
             const temImagem = block.querySelector('img, [data-testid="tweetPhoto"]');
@@ -117,30 +164,6 @@ JS_EXTRAIR_ARTIGO = """
             const innerDiv = block.querySelector('.public-DraftStyleDefault-block');
             let html = '';
             if (innerDiv) {
-                // Preservar negrito, itálico, links
-                const processar = (node) => {
-                    if (node.nodeType === 3) return node.textContent;
-                    if (node.nodeType !== 1) return '';
-
-                    const tag = node.tagName.toLowerCase();
-                    const style = node.getAttribute('style') || '';
-                    let conteudo = '';
-                    for (const filho of node.childNodes) {
-                        conteudo += processar(filho);
-                    }
-
-                    if (tag === 'a') {
-                        const href = node.getAttribute('href') || '';
-                        return '<a href="' + href + '">' + conteudo + '</a>';
-                    }
-                    if (style.includes('font-weight: bold') || style.includes('font-weight:bold')) {
-                        return '<strong>' + conteudo + '</strong>';
-                    }
-                    if (style.includes('font-style: italic') || style.includes('font-style:italic')) {
-                        return '<em>' + conteudo + '</em>';
-                    }
-                    return conteudo;
-                };
                 html = processar(innerDiv);
             } else {
                 html = block.innerText || '';
@@ -285,6 +308,15 @@ pre code {
     font-size: inherit;
     color: inherit;
 }
+.code-lang {
+    display: block;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 12px;
+    color: #8b949e;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #21262d;
+}
 ol, ul {
     margin: 0 0 16px 0;
     padding-left: 24px;
@@ -402,9 +434,9 @@ def montar_html(dados, url_original):
 
         elif tipo == "code-block":
             if not code_aberto:
-                # Detectar linguagem se o bloco parece ser um label (ex: "bash", "python")
                 lang = bloco.get("lang") or ""
-                html_parts.append(f"<pre><code>")
+                lang_label = f'<span class="code-lang">{_escape(lang)}</span>' if lang else ""
+                html_parts.append(f"<pre>{lang_label}<code>")
                 code_aberto = True
             else:
                 html_parts.append("\n")
@@ -549,7 +581,21 @@ def main():
         except Exception:
             print("  Aviso: seletor do artigo não encontrado, tentando extrair mesmo assim...")
 
-        # 2. Extrair conteúdo
+        # 2. Scroll pela página para forçar carregamento lazy de code blocks
+        page.evaluate("""async () => {
+            const delay = ms => new Promise(r => setTimeout(r, ms));
+            let y = 0;
+            const maxY = document.body.scrollHeight;
+            while (y < maxY) {
+                y += 600;
+                window.scrollTo(0, y);
+                await delay(150);
+            }
+            window.scrollTo(0, 0);
+            await delay(300);
+        }""")
+
+        # 3. Extrair conteúdo
         print("  Extraindo conteúdo...")
         dados = extrair_artigo(page)
 
