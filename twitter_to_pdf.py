@@ -272,9 +272,18 @@ pre {
     padding: 16px;
     border-radius: 6px;
     overflow-x: auto;
-    font-family: 'Courier New', monospace;
-    font-size: 14px;
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 13px;
     line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin: 16px 0;
+}
+pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+    color: inherit;
 }
 ol, ul {
     margin: 0 0 16px 0;
@@ -338,6 +347,7 @@ def montar_html(dados, url_original):
 
     # Corpo do artigo
     lista_aberta = None  # 'ol' ou 'ul'
+    code_aberto = False  # Agrupamento de blocos code-block
     legenda_anterior = None  # Para detectar legendas duplicadas
 
     for bloco in dados["blocos"]:
@@ -348,6 +358,11 @@ def montar_html(dados, url_original):
         if tipo not in ("ordered-list-item", "unordered-list-item") and lista_aberta:
             html_parts.append(f"</{lista_aberta}>")
             lista_aberta = None
+
+        # Se o bloco não é code-block, fechar bloco de código aberto
+        if tipo != "code-block" and code_aberto:
+            html_parts.append("</code></pre>")
+            code_aberto = False
 
         if tipo == "atomic":
             # Bloco de imagem inline
@@ -386,7 +401,14 @@ def montar_html(dados, url_original):
             html_parts.append(f"<blockquote>{conteudo}</blockquote>")
 
         elif tipo == "code-block":
-            html_parts.append(f"<pre><code>{_escape(conteudo)}</code></pre>")
+            if not code_aberto:
+                # Detectar linguagem se o bloco parece ser um label (ex: "bash", "python")
+                lang = bloco.get("lang") or ""
+                html_parts.append(f"<pre><code>")
+                code_aberto = True
+            else:
+                html_parts.append("\n")
+            html_parts.append(_escape(conteudo))
 
         elif tipo == "ordered-list-item":
             if lista_aberta != "ol":
@@ -408,7 +430,9 @@ def montar_html(dados, url_original):
             if conteudo and not conteudo.isspace():
                 html_parts.append(f"<p>{conteudo}</p>")
 
-    # Fechar lista aberta no final
+    # Fechar blocos abertos no final
+    if code_aberto:
+        html_parts.append("</code></pre>")
     if lista_aberta:
         html_parts.append(f"</{lista_aberta}>")
 
