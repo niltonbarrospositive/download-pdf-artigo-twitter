@@ -18,3 +18,4 @@ Thumbs.db
 
 # Generated PDFs
 *.pdf
+pdf_exportados/
