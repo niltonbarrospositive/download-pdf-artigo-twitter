@@ -16,6 +16,5 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Generated PDFs
-*.pdf
-pdf_exportados/
+# Ignore PDFs in root only (keep pdf_exportados/ tracked)
+/*.pdf
